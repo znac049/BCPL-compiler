@@ -1,0 +1,14 @@
+GET "LIBHDR"
+
+LET someFn(x, y, z) = VALOF
+$(
+  LET i = x * 2
+
+  RESULTIS (i + 3) * 42
+$)
+
+LET Start() BE
+$(
+  someFn(23, 5, 62)
+  Writes("Hello, world")
+$)
