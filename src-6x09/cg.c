@@ -12,6 +12,12 @@
 #define WordSize 2    /* 16-bit code */
 #define SDSZ    5000 /* Size of static data array */
 
+#define SEC_DATA 1
+#define SEC_CODE 2
+#define SEC_BSS  3
+
+static int currentSection = -1;
+
 static const char *opNames[OPMAX+1] = {
     0,          // 0
     0,
@@ -137,7 +143,7 @@ static const char *opNames[OPMAX+1] = {
     "PUTBYTE"
 };
 
-static int S;
+static int vm_S;
 
 static int sdata[SDSZ][2]; /* static data */
 static int dt;             /* data pointer */
@@ -157,10 +163,13 @@ static int  rdop(int);
 static int  rdn(void);
 static void error(const char *, ...);
 static void comment(const char *, ...);
+static void section(int);
 
 int main(void)
 {
     int op;
+
+    section(SEC_CODE);
 
     do
     {
@@ -175,6 +184,8 @@ int main(void)
 static int gencode(void)
 {
     int op;
+    int n;
+    int labNum;
 
     for (;;)
     {
@@ -197,48 +208,87 @@ static int gencode(void)
 
         switch (op) {
         case S_ABS:
+            comment("ABS");
             break;
 
         case S_BLAB:
+            labNum = rdn();
+            comment("BLAB %d", labNum);
             break;
 
         case S_DATALAB:
+            labNum = rdn();
+            comment("DATALAB %d", nlabNum);
+            section(SEC_DATA);
+            emit("L%d", labNum);
             break;
 
         case S_DIV:
+            comment("DIV");
             break;
 
         case S_ENDFOR:
+            labNum = rdn();
+            comment("ENDFOR %d", labNum);
             break;
 
         case S_ENTRY:
+            {
+                int nameLen = rdn();
+                char name[64];
+                int i;
+                labNum = rdn();
+
+                if (nameLen >= 64) {
+                    fprintf(stderr, "ENTRY - name is too long!");
+                }
+
+                for (i=0; i<nameLen; i++) {
+                    char ch = rdn();
+
+                    if (i<nameLen)
+                        name[i] = ch;
+                }
+                name[nameLen] = '\0';
+                comment("ENTRY %d L%d '%s", nameLen, labNum, name);
+            }
             break;
 
         case S_ENDPROC:
+            comment("ENDPROC");
             break;
 
         case S_EQ:
+            comment("EQ");
             break;
 
         case S_EQV:
+            comment("EQV");
             break;
 
         case S_FALSE:
+            comment("FALSE");
             break;
 
         case S_FINISH:
+            comment("FINISH");
             return op;
 
         case S_FNAP:
+            n = rdn();
+            comment("FNAP %d", n);
             break;
 
         case S_FNRN:
+            comment("FNRN");
             break;
 
         case S_GE:
+            comment("GE");
             break;
 
         case S_GETBYTE:
+            comment("GETBYTE");
             break;
 
         case S_GLOBAL:
@@ -374,6 +424,9 @@ static int gencode(void)
             break;
 
         case S_STACK:
+            n = rdn();
+            comment("STACK %d", n);
+            section(SEC_CODE);
             break;
 
         case S_STIND:
@@ -483,4 +536,34 @@ static void comment(const char *msg, ...)
     fputc('\n', stderr);
     va_end(ap);
     exit(1);
+}
+
+static void section (int sec)
+{
+    if (currentSection != -1) {
+        emit("\tendsection");
+    }
+
+    if (currentSection != sec) {
+        switch (sec) {
+            case SEC_DATA:
+                emit("\tsection data");
+                currentSection = sec;
+                break;
+
+            case SEC_CODE:
+                emit("\tsection code");
+                currentSection = sec;
+                break;
+
+            case SEC_BSS:
+                emit("\tsection bss");
+                currentSection = sec;
+                break;
+
+            default:
+                fprintf(stderr, "Bad section requested.\n");
+                break;
+        }
+    }
 }
