@@ -3,18 +3,12 @@ GET "LIBHDR"
 LET Start() BE
 $(
     LET x=3
+
+    Writes("Hello, world")
+    Writen(Double(x))
 $)
 
-AND FourArgs(a, x, y, z) BE
+AND Double(x, y) = VALOF
 $(
-    LET y=42;
-    LET z = 0;
-    LET p = 3;
-$)
-
-AND Fred() BE
-$(
-    LET a, b, c = 0,7, 21
-
-    FourArgs(0, 0, 0, 0)
+    RESULTIS x + x + y
 $)

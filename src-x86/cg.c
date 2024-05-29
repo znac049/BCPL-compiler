@@ -93,6 +93,7 @@ static void defdata(int, int);
 static void outdata(int, int);
 static void codelab(int);
 static void emit(const char *, ...);
+static void comment(const char *, ...);
 static char *label(int);
 static int  rdop(int);
 static int  rdn(void);
@@ -115,6 +116,7 @@ int main(void)
 static int gencode(void)
 {
     int ro, op, s1, s2, s3, sn;
+    int n;
 
     dt = sp = lp = ro = 0;
     emit(".text");
@@ -130,6 +132,9 @@ static int gencode(void)
         s1 = optab1(op);
         s2 = optab2(op);
         s3 = optab3(op);
+
+        comment("sn=%d, s1=%d, s2=%d, s3=%d", sn, s1, s2, s3);
+
         if (s3 <= 7) {
             force(s1);
             if (s3) {
@@ -141,39 +146,57 @@ static int gencode(void)
         }
         switch (op) {
         case S_LN:
-            load(X_N, rdn());
+            n = rdn();
+            comment("LN %d", n);
+            load(X_N, n);
             break;
         case S_TRUE:
+            comment("TRUE");
             load(X_N, -1);
             break;
         case S_FALSE:
+            comment("FALSE");
             load(X_N, 0);
             break;
         case S_LP:
-            load(X_P, rdn());
+            n = rdn();
+            comment("LP %d", n);
+            load(X_P, n);
             break;
         case S_LG:
-            load(X_G, rdn());
+            n = rdn();
+            comment("LG %d", n);
+            load(X_G, n);
             break;
         case S_LL:
-            load(X_L, rdn());
+            n = rdn();
+            comment("LL %d", n);
+            load(X_L, n);
             break;
         case S_LLP:
-            load(X_LP, rdn());
+            n = rdn();
+            comment("LLP %d", n);
+            load(X_LP, n);
             break;
         case S_LLG:
-            load(X_LG, rdn());
+            n = rdn();
+            comment("LLG %d", n);
+            load(X_LG, n);
             break;
         case S_LLL:
-            load(X_LL, rdn());
+            n = rdn();
+            comment("LLL %d", n);
+            load(X_LL, n);
             break;
         case S_QUERY:
+            comment("QUERY");
             load(X_R, lp != 0);
             break;
         case S_LSTR:
         {
             int n, l, i;
             n = rdn();
+            comment("LSTR %d '...'", n);
             l = --labno;
             defdata(S_DATALAB, l);
             defdata(S_LSTR, n);
@@ -184,19 +207,26 @@ static int gencode(void)
         }
         break;
         case S_SP:
-            save(X_P, rdn());
+            n = rdn();
+            comment("SP %d", n);
+            save(X_P, n);
             break;
         case S_SG:
-            save(X_G, rdn());
+            n = rdn();
+            comment("SG %d", n);
+            save(X_G, n);
             break;
         case S_SL:
-            save(X_L, rdn());
+            n = rdn();
+            comment("SL %d", n);
+            save(X_L, n);
             break;
         case S_ENTRY:
         {
             int n, l, i;
             n = rdn();
             l = rdn();
+            comment("ENTRY %d %d ...", n, l);
             printf("//\t");
             for (i = 0; i < n; i++) {
                 putchar(rdn());
@@ -209,41 +239,61 @@ static int gencode(void)
         }
         break;
         case S_ENDPROC:
-            rdn();
+            n = rdn();
+            comment("ENDPROC %d (ignored)", n);
             break;
         case S_SAVE:
+            sn = rdn();
+            comment("SAVE %d", sn);
+            break;
         case S_STACK:
             sn = rdn();
+            comment("STACK %d", sn);
             break;
         case S_STORE:
+            comment("STORE (ignored)");
             break;
         case S_RV:
+            comment("RV");
             emit("mov (,%%eax,4),%%eax");
             break;
         case S_ABS:
+            comment("ABS");
             emit("test %%eax,%%eax");
             emit("jns 1f");
             emit("neg %%eax");
             emit("1:");
             break;
         case S_NEG:
+            comment("NEG");
+            codex(X_NEG);
+            break;
         case S_NOT:
-            codex(op == S_NEG ? X_NEG : X_NOT);
+            comment("NOT");
+            codex(X_NOT);
             break;
         case S_MULT:
+            comment("MULT)");
+            codex(X_IMUL);
+            break;
         case S_DIV:
+            comment("DIV");
+            emit("cltd");
+            codex(X_IDIV);
+            break;
         case S_REM:
-            if (op == S_DIV || op == S_REM) {
-                emit("cltd");
-            }
-            codex(op == S_MULT ? X_IMUL : X_IDIV);
-            if (op == S_REM) {
-                emit("mov %%edx,%%eax");
-            }
+            comment("REM");
+            emit("cltd");
+            codex(X_IDIV);
+            emit("mov %%edx,%%eax");
             break;
         case S_PLUS:
+            comment("PLUS");
+            codex(X_ADD);
+            break;
         case S_MINUS:
-            codex(op == S_MINUS ? X_SUB : X_ADD);
+            comment("MINUS");
+            codex(X_SUB);
             break;
         case S_EQ:
         case S_NE:
@@ -254,6 +304,7 @@ static int gencode(void)
         {
             int o2;
             codex(X_CMP);
+            comment("COMPARISON OP");
             o2 = rdop(1);
             if (o2 == S_JT || o2 == S_JF) {
                 ro = op;
@@ -265,56 +316,75 @@ static int gencode(void)
         }
         break;
         case S_LSHIFT:
+            comment("LSHIFT");
+            emit("shll %%cl,%%eax");
+            break;
         case S_RSHIFT:
-            emit("sh%cl %%cl,%%eax", op == S_RSHIFT ? 'r' : 'l');
+            comment("RSHIFT");
+            emit("shrl %%cl,%%eax");
             break;
         case S_LOGAND:
+            comment("LOGAND");
+            codex(X_AND);
+            break;
         case S_LOGOR:
-            codex(op == S_LOGOR ? X_OR : X_AND);
+            comment("LOGOR");
+            codex(X_OR);
             break;
         case S_EQV:
+            comment("EQV");
+            emit("xorl $-1,%%eax");
+            codex(X_XOR);
+            break;
         case S_NEQV:
-            if (op == S_EQV) {
-                emit("xorl $-1,%%eax");
-            }
+            comment("NEQV");
             codex(X_XOR);
             break;
         case S_GETBYTE:
-        case S_PUTBYTE:
+            comment("GETBYTE");
             emit("shl $2,%%eax");
             codex(X_ADD);
-            if (op == S_GETBYTE) {
-                emit("movzb (%%eax),%%eax");
-            } else {
-                code(X_MOV, X_R, 1, X_P, sp - 3);
-                emit("mov %%cl,(%%eax)");
-                sp--;
-            }
+            emit("movzb (%%eax),%%eax");
+            break;
+        case S_PUTBYTE:
+            comment("PUTBYTE");
+            emit("shl $2,%%eax");
+            codex(X_ADD);
+            code(X_MOV, X_R, 1, X_P, sp - 3);
+            emit("mov %%cl,(%%eax)");
+            sp--;
             break;
         case S_STIND:
+            comment("STIND");
             emit("mov %%eax,(,%%ecx,4)");
             break;
         case S_GOTO:
+            comment("GOTO");
             codex(X_JMP);
             break;
         case S_JT:
         case S_JF:
+            n = rdn();
+            comment("JT/JF L%d", n);
             if (ro) {
-                emit("j%s %s", relstr[ro - S_EQ][op == S_JT], label(rdn()));
+                emit("j%s %s", relstr[ro - S_EQ][op == S_JT], label(n));
                 ro = 0;
             } else {
                 emit("orl %%eax,%%eax");
-                emit("j%s %s", op == S_JF ? "z" : "nz", label(rdn()));
+                emit("j%s %s", op == S_JF ? "z" : "nz", label(n));
             }
             break;
         case S_JUMP:
-            emit("jmp %s", label(rdn()));
+            n = rdn();
+            comment("JUMP L%d", n);
+            emit("jmp %s", label(n));
             break;
         case S_SWITCHON:
         {
             int n, d, l, i;
             n = rdn();
             d = rdn();
+            comment("SWICHON %d %d", n, d);
             l = --labno;
             defdata(S_DATALAB, l);
             for (i = 0; i < n; i++) {
@@ -333,16 +403,29 @@ static int gencode(void)
         }
         break;
         case S_RES:
-            emit("jmp %s", label(rdn()));
+            n = rdn();
+            comment("RES %d", n);
+            emit("jmp %s", label(n));
             break;
         case S_RSTACK:
             sn = rdn();
+            comment("STACK %d", sn);
             ltype[0] = X_R;
             ldata[0] = 0;
             break;
         case S_FNAP:
+            sn = rdn();
+            comment("FNAP %d", sn);
+            code(X_LEA, X_R, 1, X_P, sn);
+            codex(X_CALL);
+            if (op == S_FNAP) {
+                ltype[0] = X_R;
+                ldata[0] = 0;
+            }
+            break;
         case S_RTAP:
             sn = rdn();
+            comment("RTAP %d", sn);
             code(X_LEA, X_R, 1, X_P, sn);
             codex(X_CALL);
             if (op == S_FNAP) {
@@ -352,28 +435,48 @@ static int gencode(void)
             break;
         case S_FNRN:
         case S_RTRN:
+            comment("FNRN/RTRN");
             emit("mov %%ebp,%%ecx");
             emit("mov 4(%%ecx),%%ebp");
             emit("jmp *(%%ecx)");
             break;
         case S_ENDFOR:
+            n = rdn();
+            comment("ENDFOR %d", n);
             codex(X_CMP);
-            emit("jle %s", label(rdn()));
+            emit("jle %s", label(n));
             break;
         case S_BLAB:
+            n = rdn();
+            comment("BLAB %d", n);
+            codelab(n);
+            break;
         case S_LAB:
-            codelab(rdn());
+            n = rdn();
+            comment("LAB %d", n);
+            codelab(n);
             break;
         case S_DATALAB:
+            n = rdn();
+            comment("DATALAB %d", n);
+            defdata(op, n);
+            break;
         case S_ITEML:
+            n = rdn();
+            comment("ITEML %d", n);
+            defdata(op, n);
+            break;
         case S_ITEMN:
-            defdata(op, rdn());
+            n = rdn();
+            comment("ITEMN %d", n);
+            defdata(op, n);
             break;
         case S_NEEDS:
         case S_SECTION:
         {
             int n, i;
             n = rdn();
+            comment("NEEDS/SECTION %d ...", n);
             printf("//\t%s: ", op == S_NEEDS ? "NEEDS" : "SECTION");
             for (i = 0; i < n; i++) {
                 putchar(rdn());
@@ -384,6 +487,7 @@ static int gencode(void)
         case S_GLOBAL:
         {
             int n, x, i;
+            comment("GLOBAL");
             emit("ret");
             emit(".data");
             for (i = 0; i < dt; i++) {
@@ -398,6 +502,7 @@ static int gencode(void)
         }
         break; // FIXME: here was "return;", did he mean that exactly?
         case S_FINISH:
+            comment("FINISH");
             emit("jmp finish");
             break;
         default:
@@ -421,6 +526,7 @@ static int gencode(void)
 
 static void load(int t, int d)
 {
+    comment("load(%d, %d)", t, d);
     assert(lp >= 0 && lp <= 2);
     if (lp == 2) {
         force(1);
@@ -431,11 +537,14 @@ static void load(int t, int d)
 
 static void save(int k, int v)
 {
+    comment("save(%d, %d)", k, v);
     code(X_MOV, k, v, ltype[0], ldata[0]);
 }
 
 static void force(int st)
 {
+    comment("force(%d)", st);
+    comment(" lp=%d, sp=%d", lp, sp);
     assert(lp >= 0 && lp <= 2);
     assert(st >= 0 && st <= 2);
     if (lp == st) {
@@ -605,6 +714,19 @@ static void emit(const char *fmt, ...)
         va_start(ap, fmt);
         vprintf(fmt, ap);
     }
+    putchar('\n');
+    va_end(ap);
+}
+
+static void comment(const char *fmt, ...)
+{
+    va_list ap;
+
+    printf("\t\t\t\t; ");
+
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+
     putchar('\n');
     va_end(ap);
 }

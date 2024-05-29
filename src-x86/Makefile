@@ -2,6 +2,8 @@
 
 PREFIX?=/usr/local
 
+#CG=./cg
+CG=/usr/local/lib/bcpl/cg
 AFLAGS=--32
 
 all: cg op st
@@ -34,13 +36,13 @@ st.o: st.s
 	$(AS) $(AFLAGS) -o st.o st.s
 
 st.s: cg op st.O
-	./cg < st.O | ./op > st.s
+	$(CG) < st.O | ./op > st.s
 
 blib.o: blib.s
 	$(AS) $(AFLAGS) -o blib.o blib.s
 
 blib.s: cg op blib.O
-	./cg < blib.O | ./op > blib.s
+	$(CG) < blib.O | ./op > blib.s
 
 global.o: global.s
 	$(AS) $(AFLAGS) -o global.o global.s
