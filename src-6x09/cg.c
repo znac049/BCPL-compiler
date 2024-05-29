@@ -137,8 +137,8 @@ static int gencode(void)
     int n;
     int labNum;
 
-    int s1 = 0;     // number of pops (0,1,2)
-    int s2 = 0;     // number of pushes (0,1,2 - set to n; 3 - set to n+)
+    int numPops = 0;     // number of pops (0,1,2)
+    int numPushes = 0;     // number of pushes (0,1,2 - set to n; 3 - set to n+)
     int s3 = 0;     // ?????
 
     int sn = 0;
@@ -158,14 +158,14 @@ static int gencode(void)
             error("Bad op %d", op);
         }
 
-        s1 = optab1(op);
-        s2 = optab2(op);
+        numPops = optab1(op);
+        numPushes = optab2(op);
         s3 = optab3(op);
 
-        comment("sn=%d, s1=%d, s2=%d, s3=%d", sn, s1, s2, s3);
+        comment("sn=%d, numPops=%d, numPushes=%d, s3=%d", sn, numPops, numPushes, s3);
 
         if (s3 <= 7) {
-            force(s1);
+            force(numPops);
             if (s3) {
                 loadreg(0, s3 == 1 ? 0 : s3 == 2 ? ltype[0] != X_N : 1);
             }
@@ -562,12 +562,13 @@ static int gencode(void)
         }
 
         /* adjust stack pointer */
-        sp = s2 & 2 ? sn : sp - s1;
-        if (s2 & 1)
+        sp = numPushes & 2 ? sn : sp - numPops;
+        if (numPushes & 1)
             sp++;
+        
         /* adjust load stack pointer */
         if (s3 <= 7) {
-            lp = s2 & 1;
+            lp = numPushes & 1;
         } else if (s3 == 8 && lp < 2) {
             lp++;
         }
