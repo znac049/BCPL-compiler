@@ -722,7 +722,7 @@ static void comment(const char *fmt, ...)
 {
     va_list ap;
 
-    printf("\t\t\t\t; ");
+    printf("\t\t\t\t// ");
 
     va_start(ap, fmt);
     vprintf(fmt, ap);

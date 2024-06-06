@@ -10,6 +10,11 @@
 #include <string.h>
 #include "oc.h"
 
+#if !defined(true)
+# define true 1
+# define false 0
+#endif
+
 #define StaticDataSize 5000 /* Size of static data array */
 #define BytesPerWord 4
 
@@ -29,8 +34,8 @@
 #define X_LEA  2
 #define X_BRA  3
 #define X_CALL 4
-#define X_IMUL 5
-#define X_IDIV 6
+//#define X_IMUL 5
+//#define X_IDIV 6
 #define X_SUB  7
 #define X_CMP  8
 #define X_ADD  9
@@ -40,24 +45,29 @@
 #define X_OR   13
 #define X_XOR  14
 
+typedef struct inst_s {
+    int instNum;
+    const char *mnemonic;
+    int numArgs;
+    int isEax;
+    int isJump;
+} instruction;
 
-/* used in table below */
-#define XCJ 8 /* call/jump instruction */
-#define XI1 4 /* eax assumed */
-#define XNA 3 /* mask */
-
-static const char *const xistr[] =
-{
-    "ld", "st", "lea", "bra", "eee", "fff", "hhh",
-    "sub", "cmp", "add", "neg", "not", "and", "or",
-    "xor"
-};
-
-static const int xitab[] =
-{
-    2, 2, 2, XCJ | 1, XCJ | 1, XI1 | 2, XI1 | 2,
-    2, 2, 2, 1, 1, 2, 2, 
-    2
+instruction instructions[] = {
+    {X_LD,   "ld",  2, false, false},
+    {X_ST,   "st",  2, false, false},
+    {X_LEA,  "lea", 2, true,  false},
+    {X_BRA,  "bra", 1, false, true},
+    {X_CALL, "bsr", 1, false, false},
+    {X_SUB,  "sub", 2, false, false},
+    {X_CMP,  "cmp", 2, false, false},
+    {X_ADD,  "add", 2, false, false},
+    {X_NEG,  "neg", 1, false, false},
+    {X_NOT,  "not", 1, false, false},
+    {X_AND,  "and", 2, false, false},
+    {X_OR,   "or",  2, false, false},
+    {X_XOR,  "xor", 2, false, false},
+    {-1, 0, 0, 0, 0}
 };
 
 /* machine registers */
@@ -112,6 +122,7 @@ static void force(int);
 static void loadreg(int, int);
 static void codex(int);
 static void code(int, ...);
+static int findInstruction(int);
 
 static void defdata(int, int);
 static void outdata(int, int);
@@ -785,13 +796,20 @@ static void code(int xi, ...)
     char buf[64], *s;
     int typ[2], dat[2];
     va_list ap;
-    int cj, i1, na, x, i, t, d;
+    int cj, i1, na, i, t, d;
 
+    instruction *inst;
+    int instNum = findInstruction(xi);
+
+    if (instNum == -1) {
+        error("Much weirdness in code(%d, ....)", xi);
+    }
+  
     va_start(ap, xi);
-    x = xitab[xi];
-    cj = x & XCJ;
-    i1 = x & XI1 ? 1 : 0;
-    na = x & XNA;
+    inst = &instructions[i];
+    cj = inst->isJump;
+    i1 = inst->isEax;
+    na = inst->numArgs;
     comment("    na=%d, cj=%d, i1=%d", na, cj, i1);
     for (i = 0; i < na; i++)
     {
@@ -799,7 +817,7 @@ static void code(int xi, ...)
         dat[i] = va_arg(ap, int);
     }
     s = buf;
-    s += sprintf(s, xistr[xi]);
+    s += sprintf(s, inst->mnemonic);
     for (i = na - 1; i >= i1; i--)
     {
         if (i != na-1)
@@ -843,6 +861,19 @@ static void code(int xi, ...)
     }
     va_end(ap);
     emit("%s", buf);
+}
+
+static int findInstruction(int instructionNumber)
+{
+    int i;
+
+    for (i=0; instructions[i].instNum != -1; i++) {
+        if (instructions[i].instNum == instructionNumber) {
+            return i;
+        }
+    }
+
+    return -1;
 }
 
 

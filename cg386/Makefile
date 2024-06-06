@@ -3,7 +3,7 @@
 PREFIX?=/usr/local
 
 #CG=./cg
-CG=/usr/local/lib/bcpl/cg
+CG=/usr/local/lib/bcplc/cg
 AFLAGS=--32
 
 all: cg op st
