@@ -1,0 +1,11 @@
+GET "LIBHDR"
+
+LET Start() BE
+$(
+    LET x=3
+
+    IF x=7 DO
+    $(
+	x:=42
+    $)
+$)

@@ -2,6 +2,7 @@
 
 PREFIX?=/home/bob/8bit
 
+CFLAGS=-m32
 AFLAGS=--32
 
 #CG=./cg

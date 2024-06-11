@@ -3,9 +3,7 @@ GET "LIBHDR"
 LET Start() BE
 $(
     LET x=3
-
-    Writes("Hello, world")
-    Writen(Double(x))
+    LET y=Double(x)
 $)
 
 AND Double(x, y) = VALOF

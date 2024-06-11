@@ -28,6 +28,11 @@
 #define X_LG 6
 #define X_LL 7
 
+static const char *typeNames[] = {
+    "X_R", "X_P", "X_G", "X_L",
+    "X_N", "X_LP", "X_LG", "X_LL"
+};
+
 /* 6309 instructions in table */
 #define X_LD   0
 #define X_ST   1
@@ -67,7 +72,7 @@ instruction instructions[] = {
     {X_AND,  "and", 2, false, false},
     {X_OR,   "or",  2, false, false},
     {X_XOR,  "xor", 2, false, false},
-    {-1, 0, 0, 0, 0}
+    {-1, "", 0, 0, 0}
 };
 
 /* machine registers */
@@ -93,10 +98,8 @@ typedef struct lsi {
 } loadStackItem;
 
 // Replacing this with a typedef'd structure
-static int ltype[2];       /* load stack: type */
-static int ldata[2];       /* load stack: data */
 static int lp;             /* load stack pointer */
-static loadStackItem loadStack[2];
+static loadStackItem loadStack[2]; /* Load stack */
 
 static int strNum = 1;
 
@@ -126,6 +129,7 @@ static int findInstruction(int);
 
 static void defdata(int, int);
 static void outdata(int, int);
+static void dumpLoadStack();
 
 
 int main(void)
@@ -148,9 +152,9 @@ static int gencode(void)
     int n;
     int labNum;
 
-    int numPops = 0;     // number of pops (0,1,2)
-    int numPushes = 0;     // number of pushes (0,1,2 - set to n; 3 - set to n+)
-    int s3 = 0;     // ?????
+    int numPops = 0;        // number of pops (0,1,2)
+    int numPushes = 0;      // number of pushes (0,1,2 - set to n; 3 - set to n+)
+    int s3 = 0;             // ?????
 
     int sn = 0;
 
@@ -178,11 +182,11 @@ static int gencode(void)
         if (s3 <= 7) {
             force(numPops);
             if (s3) {
-                loadreg(0, s3 == 1 ? 0 : s3 == 2 ? ltype[0] != X_N : 1);
+                loadreg(0, s3 == 1 ? 0 : s3 == 2 ? loadStack[0].type != X_N : 1);
             }
 
             if (s3 >= 4) {
-                loadreg(1, s3 == 4 ? 0 : s3 == 5 ? ltype[1] == X_N : 1);
+                loadreg(1, s3 == 4 ? 0 : s3 == 5 ? loadStack[1].type == X_N : 1);
             }
         }
 
@@ -241,6 +245,7 @@ static int gencode(void)
 
         case S_EQ:
             comment("EQ");
+            emit("cmpd\t,x");
             break;
 
         case S_EQV:
@@ -322,11 +327,13 @@ static int gencode(void)
         case S_JF:
             labNum = rdn();
             comment("JF L%d", labNum);
+            emit("bne\tL%d", labNum);
             break;
 
         case S_JT:
             labNum = rdn();
             comment("JT L%d", labNum);
+            emit("beq\tL%d", labNum);
             break;
 
         case S_JUMP:
@@ -338,6 +345,7 @@ static int gencode(void)
         case S_LAB:
             labNum = rdn();
             comment("LAB L%d", labNum);
+            emit("L%d:", labNum);
             break;
 
         case S_LE:
@@ -656,18 +664,27 @@ static int rdn(void)
     {
         ch = getchar();
     } while (ch == ' ' || ch == '\n');
+
     if (ch == 'L') {
         ch = getchar();
     } else if (ch == '-') {
         neg = 1;
         ch = getchar();
     }
+
     while (isdigit(ch))
     {
         n = n * 10 + ch - '0';
         ch = getchar();
     }
-    return neg ? -n : n;
+
+    if (neg) {
+        n = -n;
+    }
+
+    //comment("rdn() -> %d", n);
+
+    return n;
 }
 
 static void error(const char *msg, ...)
@@ -693,70 +710,108 @@ static void comment(const char *msg, ...)
 }
 
 
-
-
-
-
 /*
  ***************************************************************
  */
 
 
-
-static void load(int t, int d)
+static void load(int targetType, int d)
 {
-    comment("load(%d, %d)", t, d);
-    assert(lp >= 0 && lp <= 2);
-    if (lp == 2) {
-        force(1);
+    switch (targetType) {
+        case X_R:
+            break;
+            
+        case X_P:
+            emit("leax\t%d,s", d*2);
+            break;
+            
+        case X_G:
+            break;
+            
+        case X_L:
+            break;
+            
+        case X_N:
+            emit("ldd\t#%d", d);
+            emit("std\t%d,s", sn*2);
+            break;
+            
+        case X_LP:
+            break;
+            
+        case X_LG:
+            break;
+            
+        case X_LL:
+            break;
+
+        default:
+            error("Bad target type %d in load()", targetType);
+            break;            
     }
-    ltype[lp] = t;
-    ldata[lp] = d;
+    // comment("load(%d, %d): lp=%d", t, d, lp);
+    // assert(lp >= 0 && lp <= 2);
+    // if (lp == 2) {  
+    //     // Make room
+    //     force(1);
+    // }
+
+    // loadStack[lp].type = t;
+    // loadStack[lp].data = d;
 }
 
 static void save(int k, int v)
 {
-    comment("save(%d, %d)\n", k, v);
-    code(X_ST, k, v, ltype[0], ldata[0]);
+    // comment("save(%d, %d)\n", k, v);
+    code(X_ST, k, v, loadStack[0].type, loadStack[0].data);
 }
 
-static void force(int st)
+/*
+ * I think this code is about making some room in the load stack by
+ * generating code for one or more of it's entries
+ */
+static void force(int targetLp)
 {
-    comment("force(%d)", st);
-    comment(" lp=%d, sp=%d", lp, sp);
+    // comment("force(%d): lp=%d, sp=%d", st, lp, st);
     assert(lp >= 0 && lp <= 2);
-    assert(st >= 0 && st <= 2);
-    if (lp == st) {
+    assert(targetLp >= 0 && targetLp <= 2);
+
+    // Nothing to do - we are at the target 
+    if (lp == targetLp) {
         return;
     }
+
     if (lp == 0) {
-        ltype[0] = X_R;
-        ldata[0] = 0;
-        code(X_LD, ltype[0], ldata[0], X_P, sp - 1);
+        loadStack[0].type = X_R;
+        loadStack[0].data = 0;
+        code(X_LD, loadStack[0].type, loadStack[0].data, X_P, sp - 1);
         lp = 1;
-        if (lp == st) {
+        if (lp == targetLp) {
             return;
         }
     }
+
     assert(lp != 0);
-    if (st == 2) {
-        assert(ltype[0] == X_R && ldata[0] == 0);
+
+    if (targetLp == 2) {
+        assert(loadStack[0].type == X_R && loadStack[0].data == 0);
+
         emit("movvvv %%eax,%%ecx");
-        code(X_LD, ltype[0], ldata[0], X_P, sp - 2);
-        ltype[1] = X_R;
-        ldata[1] = 1;
+        code(X_LD, loadStack[0].type, loadStack[0].data, X_P, sp - 2);
+        loadStack[1].type = X_R;
+        loadStack[1].data = 1;
         lp = 2;
     } else {
         comment("wooo!");
-        do
-        {
-            loadreg(0, 1); //ltype[0] != X_N);
-            code(X_ST, X_P, sp - lp, ltype[0], ldata[0]);
+
+        do {
+            loadreg(0, loadStack[0].type != X_N);
+            code(X_ST, X_P, sp - lp, loadStack[0].type, loadStack[0].data);
             if (lp == 2) {
-                ltype[0] = ltype[1];
-                ldata[0] = ltype[1] == X_R ? 0 : ldata[1];
+                loadStack[0].type = loadStack[1].type;
+                loadStack[0].data = loadStack[1].type == X_R ? 0 : loadStack[1].data;
             }
-        } while (--lp != st);
+        } while (--lp != targetLp);
     }
 }
 
@@ -764,31 +819,32 @@ static void loadreg(int i, int must)
 {
     int t, p;
 
-    comment("loadreg(%d, %d)", i, must);
+    // comment("loadreg(%d, %d)", i, must);
 
-    t = ltype[i];
+    t = loadStack[i].type;
     if (t == X_R) {
         comment("  nope");
         return;
     }
+
     p = t == X_LP || t == X_LG || t == X_LL;
     if (p || must) {
-        comment("  yep");
-        code(p && t != X_LL ? X_LEA : X_LD, t, ldata[i], X_R, i);
+        comment("  must!");
+        code(p && t != X_LL ? X_LEA : X_LD, t, loadStack[i].data, X_R, i);
         if (p) {
             emit("shr $2,%%%s", reg[i]);
         }
-        ltype[i] = X_R;
-        ldata[i] = i;
+        loadStack[i].type = X_R;
+        loadStack[i].data = i;
     }
     else {
-        comment("  nope");
+        comment("  don't have to");
     }
 }
 
 static void codex(int xi)
 {
-    code(xi, ltype[0], ldata[0], ltype[1], ldata[1]);
+    code(xi, loadStack[0].type, loadStack[0].data, loadStack[1].type, loadStack[1].data);
 }
 
 static void code(int xi, ...)
@@ -797,70 +853,86 @@ static void code(int xi, ...)
     int typ[2], dat[2];
     va_list ap;
     int cj, i1, na, i, t, d;
-
     instruction *inst;
-    int instNum = findInstruction(xi);
+    int instNum;
+    
+    // comment("code(%d, ...)", xi);
 
+    instNum = findInstruction(xi);
     if (instNum == -1) {
         error("Much weirdness in code(%d, ....)", xi);
     }
   
-    va_start(ap, xi);
-    inst = &instructions[i];
+    inst = &instructions[instNum];
     cj = inst->isJump;
     i1 = inst->isEax;
     na = inst->numArgs;
-    comment("    na=%d, cj=%d, i1=%d", na, cj, i1);
+    // comment("    code(): xi=%d, inst=%s, na=%d, cj=%d, i1=%d", xi, inst->mnemonic, na, cj, i1);
+
+    va_start(ap, xi);
     for (i = 0; i < na; i++)
     {
         typ[i] = va_arg(ap, int);
         dat[i] = va_arg(ap, int);
+
+        // comment("  %d: %d, %d", i, typ[i], dat[i]);
     }
     s = buf;
-    s += sprintf(s, inst->mnemonic);
-    for (i = na - 1; i >= i1; i--)
-    {
-        if (i != na-1)
-            *s++ = '\t';
-        //*s++ = i == na - 1 ? ' ' : ',';
-        t = typ[i];
-        d = dat[i];
-        comment("    i=%d, t=%d, d=%d", i, t, d);
-        
-        if (t <= 3) {
-            if (cj) {
-                *s++ = '*';
-            }
-        } else if (t != X_LP && t != X_LG && !cj) {
-            *s++ = '#';
-        }
-        switch (t)
-        {
-        case X_R:
-            sprintf(s, "%s", reg[d]);
-            break;
-        case X_P:
-        case X_LP:
-            sprintf(s, "%d,s", d * BytesPerWord);
-            break;
-        case X_G:
-        case X_LG:
-            sprintf(s, "%d,u", d * BytesPerWord);
-            break;
-        case X_L:
-        case X_LL:
-            sprintf(s, "%s", label(d));
-            break;
-        case X_N:
-            sprintf(s, "%d", d);
-            break;
-        }
-        while (*s) {
-            s++;
-        }
+
+    if (inst->numArgs == 1) {
+        printf("code() with one arg: (%s, %d)\n", typeNames[typ[0]], dat[0]);
     }
-    va_end(ap);
-    emit("%s", buf);
+    else if (inst->numArgs == 2) {
+        printf("code() with two args: (%s, %d), (%s, %d)\n", typeNames[typ[0]], dat[0], typeNames[typ[1]], dat[1]);
+    }
+    else {
+        error("Error in code(%d, ...): numargs set to impossible value %d", inst->numArgs);
+    }
+    // s += sprintf(s, "%s", inst->mnemonic);
+
+    // for (i = na - 1; i >= i1; i--)
+    // {
+    //     if (i != na-1)
+    //         *s++ = '\t';
+    //     //*s++ = i == na - 1 ? ' ' : ',';
+    //     t = typ[i];
+    //     d = dat[i];
+    //     // comment("    i=%d, t=%d, d=%d", i, t, d);
+        
+    //     if (t <= 3) {
+    //         if (cj) {
+    //             *s++ = '*';
+    //         }
+    //     } else if (t != X_LP && t != X_LG && !cj) {
+    //         *s++ = '#';
+    //     }
+    //     switch (t)
+    //     {
+    //     case X_R:
+    //         sprintf(s, "%s", reg[d]);
+    //         break;
+    //     case X_P:
+    //     case X_LP:
+    //         sprintf(s, "%d,s", d * BytesPerWord);
+    //         break;
+    //     case X_G:
+    //     case X_LG:
+    //         sprintf(s, "%d,u", d * BytesPerWord);
+    //         break;
+    //     case X_L:
+    //     case X_LL:
+    //         sprintf(s, "%s", label(d));
+    //         break;
+    //     case X_N:
+    //         sprintf(s, "%d", d);
+    //         break;
+    //     }
+    //     while (*s) {
+    //         s++;
+    //     }
+    // }
+    // va_end(ap);
+    // emit("%s", buf);
 }
 
 static int findInstruction(int instructionNumber)
@@ -909,4 +981,61 @@ static void outdata(int k, int n)
         emit("fcb %d", n);
         return;
     }
+}
+
+static void dumpLoadStackItem(int i)
+{
+    comment("  item@%d", i);
+
+    switch(loadStack[i].type) {
+        case X_R:
+            comment("    type: register, data=%d", loadStack[i].data);
+            break;
+
+        case X_P:
+            comment("    type: X_P, data=%d", loadStack[i].data);
+            break;
+
+        case X_G:
+            comment("    type: global, data=%d", loadStack[i].data);
+            break;
+            
+        case X_L:
+            comment("    type: X_L, data=%d", loadStack[i].data);
+            break;
+            
+        case X_N:
+            comment("    type: number, data=%d", loadStack[i].data);
+            break;
+            
+        case X_LP:
+            comment("    type: X_LP, data=%d", loadStack[i].data);
+            break;
+            
+        case X_LG:
+            comment("    type: X_LG, data=%d", loadStack[i].data);
+            break;
+            
+        case X_LL:
+            comment("    type: X_LL, data=%d", loadStack[i].data);
+            break;
+            
+        default:
+            comment("    type: unknown (%d), data=%d", loadStack[i].type, loadStack[i].data);
+            break;
+    }
+}
+
+static void dumpLoadStack()
+{
+    int i;
+
+    comment("-----------------------------");
+    comment("Load Stack:");
+    comment("  lp=%d", lp);
+
+    for (i=0; i<lp; i++) {
+        dumpLoadStackItem(i);
+    }
+    comment("-----------------------------");
 }
